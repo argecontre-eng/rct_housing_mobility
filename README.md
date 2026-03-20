@@ -40,17 +40,6 @@ or remain without one (control group). This memo uses psychological distress
 - Heteroskedasticity-robust standard errors (HC2)
 - One-sided noncompliance (control-group moving ≈ 0)
 
-## Repository Structure
-
-```
-rct_housing_mobility/
-├── MTO_RCT.Rmd            # Full analysis: compliance, ITT, TOT/LATE
-├── exhibits_mto.Rmd       # Exhibit charts for policy memo
-├── mto_policy_memo.pdf    # Policy memo prepared for J-PAL audience
-├── LICENSE
-└── README.md
-```
-
 ## Data
 
 MTO public dataset via Harvard Kennedy School. Raw data (`mto.dta`) is 
