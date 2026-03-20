@@ -1,0 +1,131 @@
+---
+output:
+  pdf_document:
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[enumerate]{leftmargin=*}
+---
+
+# MOVING TO OPPORTUNITY
+## Name: Argenis Contreras
+## Email: acontrerasburgoa@hks.harvard.edu
+## Date: February 20th 2026
+
+
+The Moving to Opportunity (MTO) Experiment
+
+
+```{r, include = FALSE}
+### Set up
+options(scipen = 999) # optional, ensures numbers aren't reported in scientific notation
+library(haven)     # read_dta
+library(dplyr)     # data wrangling
+library(ggplot2)   # plots
+library(lmtest)    # coeftest
+library(sandwich)  # robust vcovHC
+library(scales)
+```
+
+```{r load_data}
+DATA_PATH <- "mto.dta"
+if (!file.exists(DATA_PATH)) stop("Place mto.dta next to this file or update DATA_PATH.")
+mto <- read_dta(DATA_PATH)
+```
+
+```{r}
+mto %>% # this pipe creates a variable with voucher as the main filter, then dividing those who moved who received a voucher and those who didnt move even though they received a voucher.
+  group_by(voucher) %>%
+  summarise(
+    frac_moved_yes = mean(moved == 1, na.rm = TRUE),
+    frac_moved_no  = 1 - mean(moved == 1, na.rm = TRUE),
+    n = n()
+  )
+```
+
+```{r}
+# Kessler score report
+mto %>%
+  group_by(voucher) %>%
+  summarise(
+    mean_kessler = mean(kessler, na.rm = TRUE),
+    n = n()
+  )
+```
+
+```{r}
+#regression on kessler
+kess_reg <- lm(kessler ~ voucher, data = mto)
+lmtest::coeftest(kess_reg, vcov = sandwich::vcovHC(kess_reg, type = "HC2"))
+```
+
+```{r}
+#regression on moved
+move_reg <- lm(moved ~ voucher, data = mto)
+lmtest::coeftest(move_reg, vcov = sandwich::vcovHC(move_reg, type = "HC2"))
+```
+
+```{r}
+#coefficients
+ITT_y <- coef(kess_reg)["voucher"]
+ITT_d <- coef(move_reg)["voucher"]
+
+TOT <- ITT_y/ITT_d
+cat("The Treatment-on-the treated (TOT) effect is the ratio between the ITT and the Compliance Rate:", round(TOT,3))
+```
+
+```{r fig_moved_ci, echo=FALSE, message=FALSE, warning=FALSE}
+df_moved <- mto %>%
+  mutate(Group = if_else(voucher == 1, "Voucher offer", "Control")) %>%
+  group_by(Group) %>%
+  summarize(
+    n = n(),
+    mean = mean(moved, na.rm = TRUE),
+    se = sqrt(mean * (1 - mean) / n),              # SE of a proportion
+    lo = pmax(0, mean - 1.96 * se),
+    hi = pmin(1, mean + 1.96 * se),
+    label = percent(mean, accuracy = 1),
+    .groups = "drop"
+  )
+
+ggplot(df_moved, aes(x = Group, y = mean)) +
+  geom_col(width = 0.6) +
+  geom_errorbar(aes(ymin = lo, ymax = hi), width = 0.15) +
+  geom_text(aes(label = label), vjust = -0.6, size = 4) +
+  scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
+  labs(x = NULL, y = "Fraction moved",
+       title = "Compliance (First Stage): Moving by Random Assignment (95% CI)") +
+  theme_bw()
+```
+
+
+```{r fig_kessler_ci, echo=FALSE, message=FALSE, warning=FALSE}
+
+df_kess <- mto %>%
+  mutate(Group = if_else(voucher == 1, "Voucher offer", "Control")) %>%
+  group_by(Group) %>%
+  summarize(
+    n = sum(!is.na(kessler)),
+    mean = mean(kessler, na.rm = TRUE),
+    sd = sd(kessler, na.rm = TRUE),
+    se = sd / sqrt(n),
+    lo = mean - 1.96 * se,
+    hi = mean + 1.96 * se,
+    label = round(mean, 2),
+    .groups = "drop"
+  )
+
+ggplot(df_kess, aes(x = Group, y = mean)) +
+  geom_col(width = 0.6) +
+  geom_errorbar(aes(ymin = lo, ymax = hi), width = 0.15) +
+  geom_text(aes(label = label), vjust = -0.6, size = 4) +
+  labs(
+    x = NULL,
+    y = "Mean Kessler score",
+    title = "Outcome (ITT): Mean Kessler by Random Assignment (95% CI)"
+  ) +
+  theme_bw()
+```
+
+
+

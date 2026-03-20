@@ -1,0 +1,114 @@
+
+# EXHIBITS
+
+```{r exhibits_setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE,
+                      fig.align="center", fig.width=6.2, fig.height=2.25, dpi=300)
+library(dplyr)
+library(ggplot2)
+library(scales)
+theme_set(theme_bw(base_size = 11))
+paper_theme <- theme(
+  plot.title = element_text(size = 12, face = "bold", hjust = 0),
+  axis.title = element_text(size = 11),
+  axis.text  = element_text(size = 10),
+  plot.margin = margin(5.5, 12, 5.5, 70, "pt")  # <- fixed left margin
+)
+```
+
+```{r load_mto_exhibits, include=FALSE}
+library(haven)
+mto <- read_dta("mto.dta")
+```
+
+
+```{r exA1, echo=FALSE, message=FALSE, warning=FALSE}
+
+df <- mto %>%
+  mutate(Group = if_else(voucher == 1, "Voucher offer", "Control")) %>%
+  group_by(Group) %>%
+  summarize(
+    n = n(),
+    mean = mean(moved, na.rm = TRUE),
+    se = sqrt(mean * (1 - mean) / n),
+    lo = pmax(0, mean - 1.96 * se),
+    hi = pmin(1, mean + 1.96 * se),
+    label = percent(mean, accuracy = 1),
+    .groups = "drop"
+  )
+
+ggplot(df, aes(x = Group, y = mean)) +
+  geom_col(width = 0.6) +
+  geom_errorbar(aes(ymin = lo, ymax = hi), width = 0.15) +
+  geom_text(aes(label = label), vjust = -0.6, size = 4) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1),
+    labels = percent_format(accuracy = 1)
+  ) +
+  labs(x = NULL, y = "Moved (percent)", title = "Exhibit 1. Compliance (First Stage)") +
+  theme_bw(base_size = 11) + paper_theme
+```
+
+>*Exhibit 1 notes:* Voucher assignment increases moving by \textbf{43.1 percentage points} (control-group moving is essentially zero), indicating one-sided noncompliance and a strong first stage. Whiskers show 95\% confidence intervals for group means.
+
+
+\vspace{8pt}
+
+```{r exA2, echo=FALSE, message=FALSE, warning=FALSE}
+
+df <- mto %>%
+  mutate(Group = if_else(voucher == 1, "Voucher offer", "Control")) %>%
+  group_by(Group) %>%
+  summarize(
+    n = sum(!is.na(kessler)),
+    mean = mean(kessler, na.rm = TRUE),
+    sd = sd(kessler, na.rm = TRUE),
+    se = sd / sqrt(n),
+    lo = mean - 1.96 * se,
+    hi = mean + 1.96 * se,
+    label = round(mean, 2),
+    .groups = "drop"
+  )
+
+ggplot(df, aes(x = Group, y = mean)) +
+  geom_col(width = 0.6) +
+  geom_errorbar(aes(ymin = lo, ymax = hi), width = 0.15) +
+  geom_text(aes(label = label), vjust = -0.6, size = 4) +
+  scale_y_continuous(
+    limits = c(0, 8),
+    breaks = c(0, 2, 4, 6, 8)
+  ) +
+  labs(x = NULL, y = "Mean Kessler score", title = "Exhibit 2. Outcome (ITT)") +
+  theme_bw(base_size = 11) + paper_theme
+```
+
+>*Exhibit 2 notes:* Mean Kessler distress is lower in the voucher-offer group than in control. This difference corresponds to the ITT estimate (**-0.588** Kessler points). Whiskers show 95% confidence intervals for group means.
+
+```{r exA3}
+# compute ITT and first stage (OLS coefficients)
+kess_reg <- lm(kessler ~ voucher, data = mto)
+move_reg <- lm(moved ~ voucher, data = mto)
+
+ITT_y <- coef(kess_reg)[["voucher"]]
+FS    <- coef(move_reg)[["voucher"]]
+TOT   <- ITT_y / FS
+
+k0 <- mean(mto$kessler[mto$voucher == 0], na.rm = TRUE)
+k_complier_if_moved <- k0 + TOT
+
+df3 <- data.frame(
+  Group = c("Control mean", "Complier mean if moved\n(TOT/LATE-implied)"),
+  mean = c(k0, k_complier_if_moved),
+  label = round(c(k0, k_complier_if_moved), 2)
+)
+
+ggplot(df3, aes(x = Group, y = mean)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = label), vjust = -0.6, size = 4) +
+  scale_y_continuous(limits = c(0, 8), breaks = c(0, 2, 4, 6, 8)) +
+  labs(x = NULL, y = "Mean Kessler score", title = "Exhibit 3. TOT/LATE Illustration") +
+  theme_bw(base_size = 11) + paper_theme
+```
+
+>*Exhibit 3 notes:* The “Complier mean if moved” bar is not an observed group mean. It is a counterfactual mean implied by the TOT/LATE estimate: starting from the control-group mean Kessler score, we add the TOT/LATE effect (ITT divided by the first stage) to illustrate the magnitude of the implied effect for induced movers.
